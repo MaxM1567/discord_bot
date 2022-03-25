@@ -3,7 +3,7 @@ from discord.ext import commands
 from interaction_db import User
 import json
 
-# VERSION 0.1.0
+# VERSION 0.2.0
 # Изменения:
 # 1. бот может модерировать чат
 # 2. бот может выдавать WARN-ы за плохие слова и ссылки
