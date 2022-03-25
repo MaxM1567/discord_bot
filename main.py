@@ -13,7 +13,7 @@ import json
 # ПАРАМЕТРЫ
 token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.gKn-xiAJsg7hj3gPPDEBAkKz-dk'
 PREFIX = '/'  # префикс
-intents = discord.Intents.all()  # права
+intents = discord.Intents.all()
 
 with open("ban_words.json", "r", encoding='utf-8') as read_file:  # открыл json файл для чтения
     ban_words = json.load(read_file)  # список запрещённых слов
