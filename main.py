@@ -2,13 +2,13 @@ import discord
 from discord.ext import commands
 from interaction_db import User
 import youtube_dl
+import datetime as dt
 import json
 import os
 
-# VERSION 0.3.0
+# VERSION 0.4.0
 # Изменения:
-# 1. добавлена возможность воспроизведения музыки
-# 2. добавлена возможность взаимодействовать с воспроизводимой музыкой
+# 1. добавлен чат audit_log
 # 3. незначительная оптимизация
 
 # ПАРАМЕТРЫ
@@ -177,32 +177,20 @@ async def play(ctx, url: str):
     except PermissionError:
         await ctx.send(f'{author_command} !!!ДОЖДИТЕСЬ ПОКА БОТ ЗАКОНЧИТ ПРОИГРЫВАНИЕ ИЛИ ИСПОЛЬЗУЙТЕ КОМАНДУ <<stop>>!!!')
         return
-
-    voice_user = discord.utils.get(ctx.guild.voice_channels, name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
-    voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)  # канал бота
-
-    print('-------------------------------')
-    print(ctx.message.author.voice)
-    print(ctx.message.author.voice.channel)
+    try:
+        voice_user = discord.utils.get(ctx.guild.voice_channels, name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
+        voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)  # канал бота
+    except AttributeError:
+        await ctx.send(f'{author_command} !!!ДЛЯ НАЧАЛА ЗАЙДИТЕ В ГОЛОСОВОЙ КАНАЛ!!!')
+        return
 
     # ПОДКЛЮЧЕНИЕ БОТА К ГОЛОСОВОМУ КАНАЛУ
-    '''
-    if voice_bot is None:  # если у бота нет голосового канала
-        vc = await voice_user.connect()  # подключение к каналу пользователю
-
-    else:  # иначе он перемещается к пользователю
-        vc = ctx.message.author.voice.channel
-        await voice_bot.move_to(ctx.message.author.voice.channel)
-    '''
     if voice_bot is None:  # если у бота нет голосового канала
         vc = await voice_user.connect()  # подключение к каналу пользователю
 
     else:  # иначе он перемещается к пользователю
         await voice_bot.disconnect()
         vc = await voice_user.connect()  # подключение к каналу пользователю
-
-    print(vc)
-    print('-------------------------------')
 
     # информация в консоль
     await ctx.send(f'{author_command} !!!БОТ НАЧАЛ ЗАГРУЗКУ МУЗЫКИ, ОЖИДАЙТЕ!!!')
@@ -279,6 +267,42 @@ async def leave(ctx):
     else:
         await voice_bot.disconnect()
 
+
+# АУДИТ ЛОГИ
+@bot.event
+async def on_voice_state_update(member, before, after):
+    # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+    audit_log_channel = bot.get_channel(958956405816168468)  # нужный канал
+
+    # ПРОВЕРКА СОБЫТИЙ
+    if before.channel is None and after.channel is not None:  # зашёл в голосовой канал
+
+        # ГЕНЕРАЦИЯ СООБЩЕНИЯ
+        emb = discord.Embed(colour=discord.Colour.green(),
+                            description=f'Пользователь {member} подключился к голосовому каналу **{after.channel}**')
+
+        emb.set_author(name=member, icon_url=member.avatar_url)
+        emb.timestamp = dt.datetime.utcnow()
+        await audit_log_channel.send(embed=emb)
+
+    # left voice
+    elif before.channel is not None and after.channel is None:  # вышел из голосового канала
+
+        # ГЕНЕРАЦИЯ СООБЩЕНИЯ
+        emb = discord.Embed(colour=discord.Colour.red(),
+                            description=f'Пользователь {member} отключился от голосового канала **{before.channel}**')
+        emb.timestamp = dt.datetime.utcnow()
+        emb.set_author(name=member, icon_url=member.avatar_url)
+        await audit_log_channel.send(embed=emb)
+
+    elif before.channel is not None and after.channel is not None:  # переместился
+
+        # ГЕНЕРАЦИЯ СООБЩЕНИЯ
+        emb = discord.Embed(colour=discord.Colour.from_rgb(r=254, g=254, b=34),
+                            description=f'Пользователь {member} отключился от голосового канала **{before.channel}** и подключился к **{after.channel}**')
+        emb.timestamp = dt.datetime.utcnow()
+        emb.set_author(name=member, icon_url=member.avatar_url)
+        await audit_log_channel.send(embed=emb)
 
 # Теперь запускаем нашего бота
 print('BOT_CONNECTED')
