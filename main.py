@@ -1,15 +1,15 @@
 import discord
 from discord.ext import commands
 from interaction_db import User
+import youtube_dl
 import json
+import os
 
-# VERSION 0.2.1
+# VERSION 0.3.0
 # Изменения:
-# 1. бот может модерировать чат
-# 2. бот может выдавать WARN-ы за плохие слова и ссылки
-# 3. база данных и взаимодействие с ней
-# 4. команда info - показывает кол-во WARN-ов пользователя
-# 5. незначительная оптимизация
+# 1. добавлена возможность воспроизведения музыки
+# 2. добавлена возможность взаимодействовать с воспроизводимой музыкой
+# 3. незначительная оптимизация
 
 # ПАРАМЕТРЫ
 token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.gKn-xiAJsg7hj3gPPDEBAkKz-dk'  # токен
@@ -82,7 +82,7 @@ async def warn_message(message):
     await warn_channel.send(embed=embA)
 
 
-# ПОКАЗЫВАЕТ ПОЛЬЗОВАТЕЛЮ ИНФОРМАЦИЮ О НЁМ
+# INFO (показывает пользователю информацию о нём)
 @bot.command()
 async def info(ctx):
     # ПОДКЛЮЧЕНИЕ К БД
@@ -96,7 +96,7 @@ async def info(ctx):
     print('-----------------')
     print(ctx.author.id)
     print('-----------------')
-    print(f'@<{ctx.author.id}>')
+    print(f'<@{ctx.author.id}>')
     print('-----------------')
     print(member)
 
@@ -119,10 +119,12 @@ async def on_message(message):
 
         User.create(user_id=message.author.mention, quantity_warn=0)
 
-    # тесты
-    # print('запущена функция: on_message(message)')
-    # print(message.content.lower())
-    # print(type(message.content.lower()))
+    # ТЕСТЫ
+    # print(message)
+    # print(dir(message))
+    # print(message.channel.id)
+    # message.channel.id (id текстового канала в виде int)
+    # message.content (содержимое сообщения в виде str)
 
     # ПРОВЕРКИ СООБЩЕНИЙ НА ЗАПРЕЩЁННЫЙ КОНТЕНТ
     if message.author.mention == '<@738915154980503583>':  # если сообщение от бота
@@ -139,7 +141,12 @@ async def on_message(message):
         await message.delete()
         await message.channel.send(f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (ругательства запрещены)")
 
-    elif 'https://' in message.content:  # если начинается как ссылка => удаляет и выводит причину
+    elif message.channel.id == 958851176089141288:
+        # информация в консоль
+        print(f'OK ({message.author.mention}: {message.content})')
+        await bot.process_commands(message)
+
+    elif 'https://' in message.content or 'http://' in message.content:  # если начинается как ссылка => удаляет и выводит причину
         # ДОБАВИЛ WARN ПОЛЬЗОВАТЕЛЮ И ВЫВЕЛ ОБ ЭТОМ СООБЩЕНИЯ
         add_warn_user(message)
         await warn_message(message)
@@ -148,12 +155,129 @@ async def on_message(message):
         print(f'DELETED ({message.author.mention}: {message.content})')
 
         await message.delete()
-        await message.channel.send(f"{message.author.mention} В этом чате нельзя использовать ссылки!")
+        await message.channel.send(f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (в этом чате ссылки запрещены)")
 
     else:  # если всё в порядке
         # информация в консоль
         print(f'OK ({message.author.mention}: {message.content})')
         await bot.process_commands(message)
+
+
+# PLAY (начинает играть музыка по переданной ссылке)
+@bot.command()
+async def play(ctx, url: str):
+    # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+    song_there = os.path.isfile("song.mp3")  # название файла музыки
+    author_command = f'<@{ctx.author.id}>'
+
+    # если музыка играет, бот высылает сообщение
+    try:
+        if song_there:
+            os.remove("song.mp3")
+    except PermissionError:
+        await ctx.send(f'{author_command} !!!ДОЖДИТЕСЬ ПОКА БОТ ЗАКОНЧИТ ПРОИГРЫВАНИЕ ИЛИ ИСПОЛЬЗУЙТЕ КОМАНДУ <<stop>>!!!')
+        return
+
+    voice_user = discord.utils.get(ctx.guild.voice_channels, name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
+    voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)  # канал бота
+
+    print('-------------------------------')
+    print(ctx.message.author.voice)
+    print(ctx.message.author.voice.channel)
+
+    # ПОДКЛЮЧЕНИЕ БОТА К ГОЛОСОВОМУ КАНАЛУ
+    '''
+    if voice_bot is None:  # если у бота нет голосового канала
+        vc = await voice_user.connect()  # подключение к каналу пользователю
+
+    else:  # иначе он перемещается к пользователю
+        vc = ctx.message.author.voice.channel
+        await voice_bot.move_to(ctx.message.author.voice.channel)
+    '''
+    if voice_bot is None:  # если у бота нет голосового канала
+        vc = await voice_user.connect()  # подключение к каналу пользователю
+
+    else:  # иначе он перемещается к пользователю
+        await voice_bot.disconnect()
+        vc = await voice_user.connect()  # подключение к каналу пользователю
+
+    print(vc)
+    print('-------------------------------')
+
+    # информация в консоль
+    await ctx.send(f'{author_command} !!!БОТ НАЧАЛ ЗАГРУЗКУ МУЗЫКИ, ОЖИДАЙТЕ!!!')
+
+    # РАБОТА С YOUTUBE_DL (загрузка и форматирование видео)
+    # параметры загрузки видео
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}]
+    }
+
+    # ЗАГРУЗКА ВИДЕО
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:   # загрузка видео
+        ydl.download([url])
+
+    for file in os.listdir("./"):  # преобразование файла в mp3
+        if file.endswith(".mp3"):
+            os.rename(file, "song.mp3")
+
+    # НАЧИНАЕТ ИГРАТЬ МУЗЫКУ
+    try:
+        vc.play(discord.FFmpegPCMAudio('song.mp3'))
+    except AttributeError:
+        voice_bot.play(discord.FFmpegPCMAudio('song.mp3'))
+
+
+# PAUSE (ставит музыку на паузу)
+@bot.command()
+async def pause(ctx):
+    # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+    author_command = f'<@{ctx.author.id}>'
+    voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+
+    # информация в консоль
+    if voice_bot.is_playing():
+        voice_bot.pause()
+    else:
+        await ctx.send(f'<@{author_command}> !!!В ДАННЫЙ МОМЕНТ БОТ НЕ ПРОИГРЫВАЕТ МУЗЫКУ!!!')
+
+
+# RESUME (ставит музыку на паузу)
+@bot.command()
+async def resume(ctx):
+    # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+    author_command = f'<@{ctx.author.id}>'
+    voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+
+    # информация в консоль
+    if voice_bot.is_paused():
+        voice_bot.resume()
+    else:
+        await ctx.send(f'{author_command} !!!МУЗЫКА НЕ СТОИТ НА ПАУЗЕ!!!')
+
+
+# PAUSE (ставит музыку на паузу)
+@bot.command()
+async def stop(ctx):
+    # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+    voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+    # ОСТАНОВКА МУЗЫКИ
+    voice_bot.stop()
+
+
+# LEAVE (отключает бота от голосового канала)
+@bot.command()
+async def leave(ctx):
+    # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+    author_command = f'<@{ctx.author.id}>'
+    voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)
+
+    # информация в консоль
+    if voice_bot is None:
+        await ctx.send(f'{author_command} !!!БОТ НЕ ПОДКЛЮЧЕН К ГОЛОСОВУ КАНАЛУ!!!')
+    else:
+        await voice_bot.disconnect()
 
 
 # Теперь запускаем нашего бота
