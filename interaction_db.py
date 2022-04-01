@@ -18,8 +18,10 @@ class BaseModel(Model):
 
 # Определяем модель исполнителя
 class User(BaseModel):
-    user_id = AutoField(column_name='user')
-    quantity_warn = TextField(column_name='warn_user', null=True)
+    # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+    user_id = AutoField(column_name='user')  # id пользователя
+    quantity_warn = TextField(column_name='warn_user', null=True)  # количество warn
+    quantity_point = TextField(column_name='point_user', null=True)  # количество point
 
     class Meta:
         table_name = 'Users'

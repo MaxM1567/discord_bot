@@ -6,10 +6,12 @@ import datetime as dt
 import json
 import os
 
-# VERSION 0.4.0
+# VERSION 0.5.0
 # Изменения:
-# 1. добавлен чат audit_log
-# 3. незначительная оптимизация
+# 1. добавлены очки
+# 2. очки начисляются за сообщения
+# 4. появился каталог пользователя
+# 5. незначительная оптимизация
 
 # ПАРАМЕТРЫ
 token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.gKn-xiAJsg7hj3gPPDEBAkKz-dk'  # токен
@@ -88,9 +90,11 @@ async def info(ctx):
     # ПОДКЛЮЧЕНИЕ К БД
     user = User.get(User.user_id == f'<@{ctx.author.id}>')
     warn = user.quantity_warn
+    point = user.quantity_point
     member = ctx.author
 
-    # информация в консоль
+    # тесты
+    '''
     print('----------CTX----------')
     print(dir(ctx))
     print('-----------------')
@@ -99,10 +103,26 @@ async def info(ctx):
     print(f'<@{ctx.author.id}>')
     print('-----------------')
     print(member)
-
+    '''
     # ГЕНЕРАЦИЯ СООБЩЕНИЯ
     emb = discord.Embed(title='Информация пользавателя', colour=discord.Color.blue())
+    emb.add_field(name='POINT', value=f'{point}')
     emb.add_field(name='WARN', value=f'{warn}')
+    emb.set_author(name=f'{member.name}#{member.discriminator}', icon_url=member.avatar_url)
+    await ctx.send(embed=emb)
+
+
+# CATALOG (показывает пользователю его каталог)
+@bot.command()
+async def catalog(ctx):
+    # ПОДКЛЮЧЕНИЕ К БД
+    user = User.get(User.user_id == f'<@{ctx.author.id}>')
+    point = user.quantity_point
+    member = ctx.author
+
+    # ГЕНЕРАЦИЯ СООБЩЕНИЯ
+    emb = discord.Embed(title=f'{member.name} ({point} очков у вас)', colour=discord.Color.green())
+    emb.add_field(name='ТОВАРЫ:', value='!товары пока отсутствуют, загляните позже!')
     emb.set_author(name=f'{member.name}#{member.discriminator}', icon_url=member.avatar_url)
     await ctx.send(embed=emb)
 
@@ -130,6 +150,43 @@ async def on_message(message):
     if message.author.mention == '<@738915154980503583>':  # если сообщение от бота
         pass
 
+    elif message.channel.id == 959472093756555396 and (('/catalog' not in message.content)   # если сообщение в МАГАЗИН
+                                                       and ('/buy' not in message.content)):
+
+        print(1)
+        # ДОБАВИЛ WARN ПОЛЬЗОВАТЕЛЮ И ВЫВЕЛ ОБ ЭТОМ СООБЩЕНИЯ
+        add_warn_user(message)
+        await warn_message(message)
+
+        # информация в консоль
+        print(f'DELETED ({message.author.mention}: {message.content})')
+
+        await message.delete()
+        await message.channel.send(
+            f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (ознакомитесь с <#959455666613923860>)")
+
+    elif message.channel.id == 958851176089141288 and (('/play' in message.content)  # если сообщение в МУЗЫКА
+                                                       or ('/resume' in message.content)
+                                                       or ('/pause' in message.content)
+                                                       or ('/stop' in message.content)
+                                                       or ('/leave' in message.content)):
+
+        print(message.content)
+
+        # ПОДКЛЮЧЕНИЕ К БД
+        user = User.get(User.user_id == message.author.mention)
+        point = user.quantity_point
+
+        # информация в консоль
+        print(f'OK ({message.author.mention}: {message.content}; point: {int(point) + 10})')
+
+        # ОБНОВИЛ ДАННЫE БД
+        user = User(quantity_point=str(int(point) + 10))
+        user.user_id = message.author.mention  # Тот самый первичный ключ
+        user.save()
+
+        await bot.process_commands(message)
+
     elif check__warn_root_word(message) or message.content.lower() in ban_words:  # если бан слово
         # ДОБАВИЛ WARN ПОЛЬЗОВАТЕЛЮ И ВЫВЕЛ ОБ ЭТОМ СООБЩЕНИЯ
         add_warn_user(message)
@@ -141,12 +198,7 @@ async def on_message(message):
         await message.delete()
         await message.channel.send(f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (ругательства запрещены)")
 
-    elif message.channel.id == 958851176089141288:
-        # информация в консоль
-        print(f'OK ({message.author.mention}: {message.content})')
-        await bot.process_commands(message)
-
-    elif 'https://' in message.content or 'http://' in message.content:  # если начинается как ссылка => удаляет и выводит причину
+    elif 'https://' in message.content or 'http://' in message.content:  # если ссылка
         # ДОБАВИЛ WARN ПОЛЬЗОВАТЕЛЮ И ВЫВЕЛ ОБ ЭТОМ СООБЩЕНИЯ
         add_warn_user(message)
         await warn_message(message)
@@ -155,11 +207,23 @@ async def on_message(message):
         print(f'DELETED ({message.author.mention}: {message.content})')
 
         await message.delete()
-        await message.channel.send(f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (в этом чате ссылки запрещены)")
+        await message.channel.send(
+            f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (в этом чате ссылки запрещены)")
 
-    else:  # если всё в порядке
+    else:  # всё в порядке
+
+        # ПОДКЛЮЧЕНИЕ К БД
+        user = User.get(User.user_id == message.author.mention)
+        point = user.quantity_point
+
         # информация в консоль
-        print(f'OK ({message.author.mention}: {message.content})')
+        print(f'OK ({message.author.mention}: {message.content}; point: {int(point) + 10})')
+
+        # ОБНОВИЛ ДАННЫE БД
+        user = User(quantity_point=str(int(point) + 10))
+        user.user_id = message.author.mention  # Тот самый первичный ключ
+        user.save()
+
         await bot.process_commands(message)
 
 
@@ -175,10 +239,12 @@ async def play(ctx, url: str):
         if song_there:
             os.remove("song.mp3")
     except PermissionError:
-        await ctx.send(f'{author_command} !!!ДОЖДИТЕСЬ ПОКА БОТ ЗАКОНЧИТ ПРОИГРЫВАНИЕ ИЛИ ИСПОЛЬЗУЙТЕ КОМАНДУ <<stop>>!!!')
+        await ctx.send(
+            f'{author_command} !!!ДОЖДИТЕСЬ ПОКА БОТ ЗАКОНЧИТ ПРОИГРЫВАНИЕ ИЛИ ИСПОЛЬЗУЙТЕ КОМАНДУ <<stop>>!!!')
         return
     try:
-        voice_user = discord.utils.get(ctx.guild.voice_channels, name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
+        voice_user = discord.utils.get(ctx.guild.voice_channels,
+                                       name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
         voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)  # канал бота
     except AttributeError:
         await ctx.send(f'{author_command} !!!ДЛЯ НАЧАЛА ЗАЙДИТЕ В ГОЛОСОВОЙ КАНАЛ!!!')
@@ -203,7 +269,7 @@ async def play(ctx, url: str):
     }
 
     # ЗАГРУЗКА ВИДЕО
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:   # загрузка видео
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:  # загрузка видео
         ydl.download([url])
 
     for file in os.listdir("./"):  # преобразование файла в mp3
@@ -303,6 +369,7 @@ async def on_voice_state_update(member, before, after):
         emb.timestamp = dt.datetime.utcnow()
         emb.set_author(name=member, icon_url=member.avatar_url)
         await audit_log_channel.send(embed=emb)
+
 
 # Теперь запускаем нашего бота
 print('BOT_CONNECTED')
