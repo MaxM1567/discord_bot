@@ -6,7 +6,7 @@ import datetime as dt
 import json
 import os
 
-# VERSION 0.5.0
+# VERSION 0.5.1
 # Изменения:
 # 1. добавлены очки
 # 2. очки начисляются за сообщения
@@ -17,6 +17,13 @@ import os
 token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.gKn-xiAJsg7hj3gPPDEBAkKz-dk'  # токен
 PREFIX = '/'  # префикс
 intents = discord.Intents.all()  # права
+
+# системные каналы
+chat_music = 958851176089141288
+chat_catalog = 959472093756555396
+chat_warn = 950115623508271166
+chat_information = 959455666613923860
+chat_audit_log = 958956405816168468
 
 # РАБОТА С ФАЙЛАМИ
 with open("ban_words.json", "r", encoding='utf-8') as read_file:  # открыл json файл для чтения
@@ -66,7 +73,7 @@ async def warn_message(message):
     # ПОДКЛЮЧЕНИЕ К БД
     user = User.get(User.user_id == message.author.mention)  # количество warn
     warn = user.quantity_warn
-    warn_channel = bot.get_channel(950115623508271166)  # нужный канал
+    warn_channel = bot.get_channel(chat_warn)  # нужный канал
 
     # ТЕСТЫ
     # print(message.author.mention)
@@ -150,10 +157,9 @@ async def on_message(message):
     if message.author.mention == '<@738915154980503583>':  # если сообщение от бота
         pass
 
-    elif message.channel.id == 959472093756555396 and (('/catalog' not in message.content)   # если сообщение в МАГАЗИН
-                                                       and ('/buy' not in message.content)):
+    elif message.channel.id == chat_catalog and (('/catalog' not in message.content)  # если сообщение в МАГАЗИН
+                                                 and ('/buy' not in message.content)):
 
-        print(1)
         # ДОБАВИЛ WARN ПОЛЬЗОВАТЕЛЮ И ВЫВЕЛ ОБ ЭТОМ СООБЩЕНИЯ
         add_warn_user(message)
         await warn_message(message)
@@ -163,13 +169,13 @@ async def on_message(message):
 
         await message.delete()
         await message.channel.send(
-            f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (ознакомитесь с <#959455666613923860>)")
+            f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (ознакомитесь с <#{chat_information}>)")
 
-    elif message.channel.id == 958851176089141288 and (('/play' in message.content)  # если сообщение в МУЗЫКА
-                                                       or ('/resume' in message.content)
-                                                       or ('/pause' in message.content)
-                                                       or ('/stop' in message.content)
-                                                       or ('/leave' in message.content)):
+    elif message.channel.id == chat_music and (('/play' in message.content)  # если сообщение в МУЗЫКА
+                                               or ('/resume' in message.content)
+                                               or ('/pause' in message.content)
+                                               or ('/stop' in message.content)
+                                               or ('/leave' in message.content)):
 
         print(message.content)
 
@@ -338,7 +344,7 @@ async def leave(ctx):
 @bot.event
 async def on_voice_state_update(member, before, after):
     # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
-    audit_log_channel = bot.get_channel(958956405816168468)  # нужный канал
+    audit_log_channel = bot.get_channel(chat_audit_log)  # нужный канал
 
     # ПРОВЕРКА СОБЫТИЙ
     if before.channel is None and after.channel is not None:  # зашёл в голосовой канал
