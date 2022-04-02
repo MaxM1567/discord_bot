@@ -6,12 +6,14 @@ import datetime as dt
 import json
 import os
 
-# VERSION 0.5.1
+# VERSION 0.5.2
 # Изменения:
 # 1. добавлены очки
 # 2. очки начисляются за сообщения
+# 3. очки начисляются за нахождение в голосовом канале
 # 4. появился каталог пользователя
-# 5. незначительная оптимизация
+# 5. команды / удаляются из чата после выполнения
+# 6. незначительная оптимизация
 
 # ПАРАМЕТРЫ
 token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.gKn-xiAJsg7hj3gPPDEBAkKz-dk'  # токен
@@ -24,6 +26,7 @@ chat_catalog = 959472093756555396
 chat_warn = 950115623508271166
 chat_information = 959455666613923860
 chat_audit_log = 958956405816168468
+chat_afk = 958855439448162334
 
 # РАБОТА С ФАЙЛАМИ
 with open("ban_words.json", "r", encoding='utf-8') as read_file:  # открыл json файл для чтения
@@ -117,6 +120,7 @@ async def info(ctx):
     emb.add_field(name='WARN', value=f'{warn}')
     emb.set_author(name=f'{member.name}#{member.discriminator}', icon_url=member.avatar_url)
     await ctx.send(embed=emb)
+    await ctx.message.delete()
 
 
 # CATALOG (показывает пользователю его каталог)
@@ -132,6 +136,7 @@ async def catalog(ctx):
     emb.add_field(name='ТОВАРЫ:', value='!товары пока отсутствуют, загляните позже!')
     emb.set_author(name=f'{member.name}#{member.discriminator}', icon_url=member.avatar_url)
     await ctx.send(embed=emb)
+    await ctx.message.delete()
 
 
 # ПРОВЕРКА СООБЩЕНИЯ НА ЗАПРЕЩЁННЫЕ СЛОВА
@@ -249,8 +254,7 @@ async def play(ctx, url: str):
             f'{author_command} !!!ДОЖДИТЕСЬ ПОКА БОТ ЗАКОНЧИТ ПРОИГРЫВАНИЕ ИЛИ ИСПОЛЬЗУЙТЕ КОМАНДУ <<stop>>!!!')
         return
     try:
-        voice_user = discord.utils.get(ctx.guild.voice_channels,
-                                       name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
+        voice_user = discord.utils.get(ctx.guild.voice_channels, name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
         voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)  # канал бота
     except AttributeError:
         await ctx.send(f'{author_command} !!!ДЛЯ НАЧАЛА ЗАЙДИТЕ В ГОЛОСОВОЙ КАНАЛ!!!')
@@ -301,6 +305,7 @@ async def pause(ctx):
         voice_bot.pause()
     else:
         await ctx.send(f'<@{author_command}> !!!В ДАННЫЙ МОМЕНТ БОТ НЕ ПРОИГРЫВАЕТ МУЗЫКУ!!!')
+        await ctx.message.delete()
 
 
 # RESUME (ставит музыку на паузу)
@@ -315,6 +320,7 @@ async def resume(ctx):
         voice_bot.resume()
     else:
         await ctx.send(f'{author_command} !!!МУЗЫКА НЕ СТОИТ НА ПАУЗЕ!!!')
+        await ctx.message.delete()
 
 
 # PAUSE (ставит музыку на паузу)
@@ -338,6 +344,63 @@ async def leave(ctx):
         await ctx.send(f'{author_command} !!!БОТ НЕ ПОДКЛЮЧЕН К ГОЛОСОВУ КАНАЛУ!!!')
     else:
         await voice_bot.disconnect()
+    await ctx.message.delete()
+
+
+# ОЧКИ ЗА ВРЕМЯ
+def points_for_time(user_id):
+    user = User.get(User.user_id == f'<@{user_id}>')
+
+    last_con = user.last_con
+    last_dis_con = user.last_dis_con
+    point = user.quantity_point
+
+    last_con = list(map(lambda x: int(x), (((((str(last_con)[:3] + str(last_con)[3:].replace('0', '')).split())[0]).split('-')) + ((((str(last_con)).split())[1]).split(':')))))
+    for i in range(4):
+        if str(last_con[i])[0] == '0':
+            last_con[i] = int(str(last_con[i][0:]))
+
+    last_dis_con = list(map(lambda x: int(x), (((((str(last_dis_con)[:3] + str(last_dis_con)[3:].replace('0', '')).split())[0]).split('-')) + ((((str(last_dis_con)).split())[1]).split(':')))))
+    for i in range(4):
+        if str(last_dis_con[i])[0] == '0':
+            last_con[i] = int(str(last_dis_con[i][0:]))
+
+    communication_time = ((str(dt.datetime(last_dis_con[0], last_dis_con[1], last_dis_con[2], last_dis_con[3], last_dis_con[4]) - (dt.datetime(last_con[0], last_con[1], last_con[2], last_con[3], last_con[4]))))[:-3]).split(':')
+
+    for i in range(len(communication_time)):
+        if str(communication_time[i])[0] == '0':
+            communication_time[i] = str(communication_time[i][0:])
+
+    time = (int(communication_time[0]) * 60) + (int(communication_time[1].replace('0', '')))
+
+    if time != 0:
+        # ОБНОВИЛ ДАННЫE БД
+        user = User(quantity_point=str(int(point) + (7 * time)))
+        user.user_id = f'<@{user_id}>'  # Тот самый первичный ключ
+        user.save()
+
+
+# УСТАНАВЛИВАЕТ ВРЕМЯ ПОСЛЕДНЕГО ВХОДА И ВЫХОДА ПОЛЬЗОВАТЕЛЯ
+def date_registration(user_id, action):
+
+    if user_id == 738915154980503583:
+        pass
+
+    elif action == 'con':
+        # ОБНОВИЛ ДАННЫE БД
+        user = User(last_con=str(dt.datetime.now().strftime('%Y-%m-%d %H:%M')))
+        user.user_id = f'<@{user_id}>'  # Тот самый первичный ключ
+        user.save()
+
+    elif action == 'dis_con' or action == 'moved_afk':
+        # ОБНОВИЛ ДАННЫE БД
+        user = User(last_dis_con=str(dt.datetime.now().strftime('%Y-%m-%d %H:%M')))
+        user.user_id = f'<@{user_id}>'  # Тот самый первичный ключ
+        user.save()
+
+        points_for_time(user_id)
+    else:
+        pass
 
 
 # АУДИТ ЛОГИ
@@ -348,6 +411,9 @@ async def on_voice_state_update(member, before, after):
 
     # ПРОВЕРКА СОБЫТИЙ
     if before.channel is None and after.channel is not None:  # зашёл в голосовой канал
+
+        # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+        action = 'con'
 
         # ГЕНЕРАЦИЯ СООБЩЕНИЯ
         emb = discord.Embed(colour=discord.Colour.green(),
@@ -360,6 +426,9 @@ async def on_voice_state_update(member, before, after):
     # left voice
     elif before.channel is not None and after.channel is None:  # вышел из голосового канала
 
+        # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+        action = 'dis_con'
+
         # ГЕНЕРАЦИЯ СООБЩЕНИЯ
         emb = discord.Embed(colour=discord.Colour.red(),
                             description=f'Пользователь {member} отключился от голосового канала **{before.channel}**')
@@ -367,7 +436,13 @@ async def on_voice_state_update(member, before, after):
         emb.set_author(name=member, icon_url=member.avatar_url)
         await audit_log_channel.send(embed=emb)
 
-    elif before.channel is not None and after.channel is not None:  # переместился
+    else:  # переместился
+
+        # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
+        if after.channel.id == chat_afk:
+            action = 'moved_afk'
+        else:
+            action = 'moved'
 
         # ГЕНЕРАЦИЯ СООБЩЕНИЯ
         emb = discord.Embed(colour=discord.Colour.from_rgb(r=254, g=254, b=34),
@@ -375,6 +450,8 @@ async def on_voice_state_update(member, before, after):
         emb.timestamp = dt.datetime.utcnow()
         emb.set_author(name=member, icon_url=member.avatar_url)
         await audit_log_channel.send(embed=emb)
+
+    date_registration(member.id, action)
 
 
 # Теперь запускаем нашего бота
