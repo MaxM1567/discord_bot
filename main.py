@@ -6,17 +6,13 @@ import datetime as dt
 import json
 import os
 
-# VERSION 0.5.2
+# VERSION 0.6.0
 # Изменения:
-# 1. добавлены очки
-# 2. очки начисляются за сообщения
-# 3. очки начисляются за нахождение в голосовом канале
-# 4. появился каталог пользователя
-# 5. команды / удаляются из чата после выполнения
-# 6. незначительная оптимизация
+# 1. добавлена возможность покупки уровня за валюту
+# 2. незначительная оптимизация
 
 # ПАРАМЕТРЫ
-token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.gKn-xiAJsg7hj3gPPDEBAkKz-dk'  # токен
+token = ''  # токен
 PREFIX = '/'  # префикс
 intents = discord.Intents.all()  # права
 
@@ -27,6 +23,9 @@ chat_warn = 950115623508271166
 chat_information = 959455666613923860
 chat_audit_log = 958956405816168468
 chat_afk = 958855439448162334
+
+# ЦЕНЫ
+price_level = 1000  # цена за level
 
 # РАБОТА С ФАЙЛАМИ
 with open("ban_words.json", "r", encoding='utf-8') as read_file:  # открыл json файл для чтения
@@ -101,6 +100,7 @@ async def info(ctx):
     user = User.get(User.user_id == f'<@{ctx.author.id}>')
     warn = user.quantity_warn
     point = user.quantity_point
+    level_user = user.level_user
     member = ctx.author
 
     # тесты
@@ -116,6 +116,7 @@ async def info(ctx):
     '''
     # ГЕНЕРАЦИЯ СООБЩЕНИЯ
     emb = discord.Embed(title='Информация пользавателя', colour=discord.Color.blue())
+    emb.add_field(name='LEVEL', value=f'{level_user}')
     emb.add_field(name='POINT', value=f'{point}')
     emb.add_field(name='WARN', value=f'{warn}')
     emb.set_author(name=f'{member.name}#{member.discriminator}', icon_url=member.avatar_url)
@@ -126,16 +127,89 @@ async def info(ctx):
 # CATALOG (показывает пользователю его каталог)
 @bot.command()
 async def catalog(ctx):
+    # ОБНОВИЛ ДАННЫE БД
+    user = User(last_catalog=(dt.datetime.now().strftime('%Y-%m-%d %H:%M')))
+    user.user_id = f'<@{ctx.author.id}>'  # Тот самый первичный ключ
+    user.save()
+
     # ПОДКЛЮЧЕНИЕ К БД
     user = User.get(User.user_id == f'<@{ctx.author.id}>')
-    point = user.quantity_point
+    point = int(user.quantity_point)
     member = ctx.author
+
+    point_counter = point  # счётчик очков
+    k = 0  # счётчик
+    result = 0  # конечная цена
+
+    while point_counter > price_level:
+        point_counter -= price_level
+        result += price_level
+        k += 1
+
+    # проверил хватит ли очков
+    if point < price_level:
+        buy_status_1 = '1 ед. за 1000 очков'
+        buy_status_2 = 'не хватает средств'
+    else:
+        buy_status_1 = f'{k} ед. за {result} очков'
+        buy_status_2 = 'чтобы купить: `/buy level`'
 
     # ГЕНЕРАЦИЯ СООБЩЕНИЯ
     emb = discord.Embed(title=f'{member.name} ({point} очков у вас)', colour=discord.Color.green())
-    emb.add_field(name='ТОВАРЫ:', value='!товары пока отсутствуют, загляните позже!')
+    emb.add_field(name=f'LEVEL ({buy_status_1})', value=buy_status_2)
     emb.set_author(name=f'{member.name}#{member.discriminator}', icon_url=member.avatar_url)
     await ctx.send(embed=emb)
+    await ctx.message.delete()
+
+
+# BUY (позволяет пользователю купить товар из магазина)
+@bot.command()
+async def buy(ctx, product):
+    # ПОДКЛЮЧЕНИЕ К БД
+    user = User.get(User.user_id == f'<@{ctx.author.id}>')  # получил последнюю дату каталога
+
+    # дата каталога из STR в объект DATETIME
+    last_catalog = (dt.datetime.strptime(user.last_catalog, "%Y-%m-%d %H:%M"))
+
+    # актуальная дата из STR в объект DATETIME
+    current_date = (dt.datetime.strptime((dt.datetime.now().strftime('%Y-%m-%d %H:%M')), "%Y-%m-%d %H:%M"))
+
+    # прошло ли больше одной минуты или человек не вызывал каталог
+    if (current_date - last_catalog) < dt.timedelta(minutes=2) or user.last_catalog == 0:
+        if product == 'level':
+            # ПОДКЛЮЧЕНИЕ К БД
+            user = User.get(User.user_id == f'<@{ctx.author.id}>')
+            point = int(user.quantity_point)
+            level_user = int(user.level_user)
+
+            point_counter = point  # счётчик очков
+            k = 0  # счётчик
+            result = 0  # конечная цена
+
+            # проверил хватит ли очков
+            if point < price_level:
+                await ctx.send(f'<@{ctx.author.id}> !!!СНАЧАЛА ПРОВЕРЬТЕ СВОЙ АКТУАЛЬНЫЙ КАТАЛОГ (`/catalog`)!!!')
+                await ctx.message.delete()
+                return
+
+            while point_counter > price_level:
+                point_counter -= price_level
+                result += price_level
+                k += 1
+
+            # ОБНОВИЛ ДАННЫE БД
+            user = User(quantity_point=point - result)
+            user.user_id = f'<@{ctx.author.id}>'  # Тот самый первичный ключ
+            user.save()
+
+            user = User(level_user=level_user + k)
+            user.user_id = f'<@{ctx.author.id}>'  # Тот самый первичный ключ
+            user.save()
+
+            await ctx.send(f'<@{ctx.author.id}> !!!ПОКУПКА ПРОШЛА УСПЕШНО!!!')
+    else:
+        await ctx.send(f'<@{ctx.author.id}> !!!СНАЧАЛА ПРОВЕРЬТЕ СВОЙ АКТУАЛЬНЫЙ КАТАЛОГ (`/catalog`)!!!')
+
     await ctx.message.delete()
 
 
@@ -251,10 +325,11 @@ async def play(ctx, url: str):
             os.remove("song.mp3")
     except PermissionError:
         await ctx.send(
-            f'{author_command} !!!ДОЖДИТЕСЬ ПОКА БОТ ЗАКОНЧИТ ПРОИГРЫВАНИЕ ИЛИ ИСПОЛЬЗУЙТЕ КОМАНДУ <<stop>>!!!')
+            f'{author_command} !!!ДОЖДИТЕСЬ ПОКА БОТ ЗАКОНЧИТ ПРОИГРЫВАНИЕ ИЛИ ИСПОЛЬЗУЙТЕ КОМАНДУ (`/stop`)!!!')
         return
     try:
-        voice_user = discord.utils.get(ctx.guild.voice_channels, name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
+        voice_user = discord.utils.get(ctx.guild.voice_channels,
+                                       name=ctx.message.author.voice.channel.name)  # тоже канал пользователя
         voice_bot = discord.utils.get(bot.voice_clients, guild=ctx.guild)  # канал бота
     except AttributeError:
         await ctx.send(f'{author_command} !!!ДЛЯ НАЧАЛА ЗАЙДИТЕ В ГОЛОСОВОЙ КАНАЛ!!!')
@@ -350,39 +425,26 @@ async def leave(ctx):
 # ОЧКИ ЗА ВРЕМЯ
 def points_for_time(user_id):
     user = User.get(User.user_id == f'<@{user_id}>')
-
-    last_con = user.last_con
-    last_dis_con = user.last_dis_con
     point = user.quantity_point
 
-    last_con = list(map(lambda x: int(x), (((((str(last_con)[:3] + str(last_con)[3:].replace('0', '')).split())[0]).split('-')) + ((((str(last_con)).split())[1]).split(':')))))
-    for i in range(4):
-        if str(last_con[i])[0] == '0':
-            last_con[i] = int(str(last_con[i][0:]))
+    # дата каталога из STR в объект DATETIME
+    last_con = (dt.datetime.strptime(user.last_con, "%Y-%m-%d %H:%M"))
 
-    last_dis_con = list(map(lambda x: int(x), (((((str(last_dis_con)[:3] + str(last_dis_con)[3:].replace('0', '')).split())[0]).split('-')) + ((((str(last_dis_con)).split())[1]).split(':')))))
-    for i in range(4):
-        if str(last_dis_con[i])[0] == '0':
-            last_con[i] = int(str(last_dis_con[i][0:]))
+    # актуальная дата из STR в объект DATETIME
+    last_dis_con = (dt.datetime.strptime(user.last_dis_con, "%Y-%m-%d %H:%M"))
 
-    communication_time = ((str(dt.datetime(last_dis_con[0], last_dis_con[1], last_dis_con[2], last_dis_con[3], last_dis_con[4]) - (dt.datetime(last_con[0], last_con[1], last_con[2], last_con[3], last_con[4]))))[:-3]).split(':')
+    time = last_dis_con - last_con
 
-    for i in range(len(communication_time)):
-        if str(communication_time[i])[0] == '0':
-            communication_time[i] = str(communication_time[i][0:])
-
-    time = (int(communication_time[0]) * 60) + (int(communication_time[1].replace('0', '')))
-
-    if time != 0:
+    if (last_dis_con - last_con) >= dt.timedelta(minutes=1):
         # ОБНОВИЛ ДАННЫE БД
-        user = User(quantity_point=str(int(point) + (7 * time)))
+        time_in_points = (time.days * 1440) + (time.seconds // 60)
+        user = User(quantity_point=str(int(point) + (7 * time_in_points)))
         user.user_id = f'<@{user_id}>'  # Тот самый первичный ключ
         user.save()
 
 
 # УСТАНАВЛИВАЕТ ВРЕМЯ ПОСЛЕДНЕГО ВХОДА И ВЫХОДА ПОЛЬЗОВАТЕЛЯ
 def date_registration(user_id, action):
-
     if user_id == 738915154980503583:
         pass
 

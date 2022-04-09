@@ -24,6 +24,8 @@ class User(BaseModel):
     quantity_point = TextField(column_name='point_user', null=True)  # количество point
     last_con = TextField(column_name='last_con', null=True)  # последний раз зашёл
     last_dis_con = TextField(column_name='last_dis_con', null=True)  # последний раз вышел
+    last_catalog = DateTimeField(column_name='catalog', null=True)
+    level_user = IntegerField(column_name='level', null=True)
 
     class Meta:
         table_name = 'Users'
