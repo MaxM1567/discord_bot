@@ -6,13 +6,13 @@ import datetime as dt
 import json
 import os
 
-# VERSION 0.6.0
+# VERSION 0.6.1
 # Изменения:
 # 1. добавлена возможность покупки уровня за валюту
 # 2. незначительная оптимизация
 
 # ПАРАМЕТРЫ
-token = ''  # токен
+token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.tfrXi9ct7-ke5mdOUeFEUQgOWU4'  # токен
 PREFIX = '/'  # префикс
 intents = discord.Intents.all()  # права
 
@@ -148,15 +148,13 @@ async def catalog(ctx):
 
     # проверил хватит ли очков
     if point < price_level:
-        buy_status_1 = '1 ед. за 1000 очков'
         buy_status_2 = 'не хватает средств'
     else:
-        buy_status_1 = f'{k} ед. за {result} очков'
-        buy_status_2 = 'чтобы купить: `/buy level`'
+        buy_status_2 = 'чтобы купить: `/buy level <кол-во>`'
 
     # ГЕНЕРАЦИЯ СООБЩЕНИЯ
     emb = discord.Embed(title=f'{member.name} ({point} очков у вас)', colour=discord.Color.green())
-    emb.add_field(name=f'LEVEL ({buy_status_1})', value=buy_status_2)
+    emb.add_field(name=f'LEVEL (1 ед. за 1000 очков)', value=buy_status_2)
     emb.set_author(name=f'{member.name}#{member.discriminator}', icon_url=member.avatar_url)
     await ctx.send(embed=emb)
     await ctx.message.delete()
@@ -164,7 +162,7 @@ async def catalog(ctx):
 
 # BUY (позволяет пользователю купить товар из магазина)
 @bot.command()
-async def buy(ctx, product):
+async def buy(ctx, product, quantity: int):
     # ПОДКЛЮЧЕНИЕ К БД
     user = User.get(User.user_id == f'<@{ctx.author.id}>')  # получил последнюю дату каталога
 
@@ -183,7 +181,6 @@ async def buy(ctx, product):
             level_user = int(user.level_user)
 
             point_counter = point  # счётчик очков
-            k = 0  # счётчик
             result = 0  # конечная цена
 
             # проверил хватит ли очков
@@ -192,17 +189,21 @@ async def buy(ctx, product):
                 await ctx.message.delete()
                 return
 
-            while point_counter > price_level:
+            if (point // 1000) < quantity:
+                await ctx.send(f'<@{ctx.author.id}> !!!НЕ ХВАТАЕТ СРЕДСТВ!!!')
+                await ctx.message.delete()
+                return
+
+            for i in range(quantity):
                 point_counter -= price_level
                 result += price_level
-                k += 1
 
             # ОБНОВИЛ ДАННЫE БД
             user = User(quantity_point=point - result)
             user.user_id = f'<@{ctx.author.id}>'  # Тот самый первичный ключ
             user.save()
 
-            user = User(level_user=level_user + k)
+            user = User(level_user=level_user + quantity)
             user.user_id = f'<@{ctx.author.id}>'  # Тот самый первичный ключ
             user.save()
 
