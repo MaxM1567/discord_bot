@@ -6,13 +6,14 @@ import datetime as dt
 import json
 import os
 
-# VERSION 0.6.1
+# VERSION 0.6.2
 # Изменения:
-# 1. добавлена возможность покупки уровня за валюту
-# 2. незначительная оптимизация
+# 1. новые товары в каталоге
+# 2. новые команды для администрации
+# 3. незначительная оптимизация
 
 # ПАРАМЕТРЫ
-token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.tfrXi9ct7-ke5mdOUeFEUQgOWU4'  # токен
+token = ''  # токен
 PREFIX = '/'  # префикс
 intents = discord.Intents.all()  # права
 
@@ -23,9 +24,13 @@ chat_warn = 950115623508271166
 chat_information = 959455666613923860
 chat_audit_log = 958956405816168468
 chat_afk = 958855439448162334
+chat_chat = 738890737403428989
 
 # ЦЕНЫ
 price_level = 1000  # цена за level
+
+price_vip_role = 9999  # цена за vip_role
+id_vip_role = 963868471660265502
 
 # РАБОТА С ФАЙЛАМИ
 with open("ban_words.json", "r", encoding='utf-8') as read_file:  # открыл json файл для чтения
@@ -93,6 +98,34 @@ async def warn_message(message):
     await warn_channel.send(embed=embA)
 
 
+# ADD_POINT (добавляет очки пользователю)
+@bot.command()
+async def add_point(ctx, user_user, new_point: int):
+    # admin ли?
+    admin_status = False
+
+    for i in ctx.author.roles:
+        if str(i) == 'admin':
+            admin_status = True
+
+    if not admin_status:
+        await ctx.send(f'<@{ctx.author.id}> !!!У вас нет прав!!!')
+        await ctx.message.delete()
+        return
+
+    # ПОДКЛЮЧЕНИЕ К БД
+    user = User.get(User.user_id == user_user)
+    point = user.quantity_point
+
+    # ОБНОВИЛ ДАННЫE БД
+    user = User(quantity_point=str(int(point) + new_point))
+    user.user_id = user_user  # Тот самый первичный ключ
+    user.save()
+
+    await ctx.send(f'<@{ctx.author.id}> !!!{new_point} очков добавлено {user_user}!!!')
+    await ctx.message.delete()
+
+
 # INFO (показывает пользователю информацию о нём)
 @bot.command()
 async def info(ctx):
@@ -137,24 +170,31 @@ async def catalog(ctx):
     point = int(user.quantity_point)
     member = ctx.author
 
-    point_counter = point  # счётчик очков
-    k = 0  # счётчик
-    result = 0  # конечная цена
-
-    while point_counter > price_level:
-        point_counter -= price_level
-        result += price_level
-        k += 1
-
-    # проверил хватит ли очков
+    # УРОВЕНЬ
     if point < price_level:
-        buy_status_2 = 'не хватает средств'
+        buy_status_level = 'не хватает средств'
     else:
-        buy_status_2 = 'чтобы купить: `/buy level <кол-во>`'
+        buy_status_level = 'чтобы купить: `/buy level <кол-во>`'
+
+    # VIP РОЛЬ
+    buy_status_vip = False
+
+    for i in ctx.author.roles:
+        if str(i) == 'VIP':
+            buy_status_vip = True
 
     # ГЕНЕРАЦИЯ СООБЩЕНИЯ
     emb = discord.Embed(title=f'{member.name} ({point} очков у вас)', colour=discord.Color.green())
-    emb.add_field(name=f'LEVEL (1 ед. за 1000 очков)', value=buy_status_2)
+    emb.add_field(name=f'LEVEL (1 ед. за {price_level} очков)', value=buy_status_level)
+
+    if buy_status_vip:
+        emb.add_field(name=f'VIP роль (приобретено)', value='можно приобрести только один раз')
+    else:
+        if point < price_vip_role:
+            emb.add_field(name=f'VIP роль ({price_vip_role} очков)', value='не хватает средств')
+        else:
+            emb.add_field(name=f'VIP роль ({price_vip_role} очков)', value='чтобы купить: `/buy VIP`')
+
     emb.set_author(name=f'{member.name}#{member.discriminator}', icon_url=member.avatar_url)
     await ctx.send(embed=emb)
     await ctx.message.delete()
@@ -162,9 +202,10 @@ async def catalog(ctx):
 
 # BUY (позволяет пользователю купить товар из магазина)
 @bot.command()
-async def buy(ctx, product, quantity: int):
+async def buy(ctx, product, quantity: int = None):
     # ПОДКЛЮЧЕНИЕ К БД
     user = User.get(User.user_id == f'<@{ctx.author.id}>')  # получил последнюю дату каталога
+    point = int(user.quantity_point)
 
     # дата каталога из STR в объект DATETIME
     last_catalog = (dt.datetime.strptime(user.last_catalog, "%Y-%m-%d %H:%M"))
@@ -176,20 +217,13 @@ async def buy(ctx, product, quantity: int):
     if (current_date - last_catalog) < dt.timedelta(minutes=2) or user.last_catalog == 0:
         if product == 'level':
             # ПОДКЛЮЧЕНИЕ К БД
-            user = User.get(User.user_id == f'<@{ctx.author.id}>')
-            point = int(user.quantity_point)
             level_user = int(user.level_user)
 
             point_counter = point  # счётчик очков
             result = 0  # конечная цена
 
             # проверил хватит ли очков
-            if point < price_level:
-                await ctx.send(f'<@{ctx.author.id}> !!!СНАЧАЛА ПРОВЕРЬТЕ СВОЙ АКТУАЛЬНЫЙ КАТАЛОГ (`/catalog`)!!!')
-                await ctx.message.delete()
-                return
-
-            if (point // 1000) < quantity:
+            if ((point // 1000) < quantity) or (point < price_level):
                 await ctx.send(f'<@{ctx.author.id}> !!!НЕ ХВАТАЕТ СРЕДСТВ!!!')
                 await ctx.message.delete()
                 return
@@ -208,6 +242,34 @@ async def buy(ctx, product, quantity: int):
             user.save()
 
             await ctx.send(f'<@{ctx.author.id}> !!!ПОКУПКА ПРОШЛА УСПЕШНО!!!')
+
+        elif product == 'VIP':
+            buy_status_vip = False
+
+            # проверил хватит ли очков
+            for i in ctx.author.roles:
+                if str(i) == 'VIP':
+                    buy_status_vip = True
+
+            if buy_status_vip:
+                await ctx.send(f'<@{ctx.author.id}> !!!ТОВАР УЖЕ ПРИОБРЕТЁН!!!')
+                await ctx.message.delete()
+                return
+
+            # проверил хватит ли очков
+            if point < price_vip_role:
+                await ctx.send(f'<@{ctx.author.id}> !!!НЕ ХВАТАЕТ СРЕДСТВ!!!')
+                await ctx.message.delete()
+                return
+
+            role = discord.utils.get(bot.get_guild(ctx.guild.id).roles, id=id_vip_role)
+            await ctx.author.add_roles(role)
+            await ctx.message.delete()
+
+            # ОБНОВИЛ ДАННЫE БД
+            user = User(quantity_point=point - price_vip_role)
+            user.user_id = f'<@{ctx.author.id}>'  # Тот самый первичный ключ
+            user.save()
     else:
         await ctx.send(f'<@{ctx.author.id}> !!!СНАЧАЛА ПРОВЕРЬТЕ СВОЙ АКТУАЛЬНЫЙ КАТАЛОГ (`/catalog`)!!!')
 
@@ -251,13 +313,25 @@ async def on_message(message):
         await message.channel.send(
             f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (ознакомитесь с <#{chat_information}>)")
 
+    elif message.channel.id == chat_chat and (('/catalog' in message.content)
+                                              or ('/buy' in message.content)):  # если сообщение в МАГАЗИН
+
+        # ДОБАВИЛ WARN ПОЛЬЗОВАТЕЛЮ И ВЫВЕЛ ОБ ЭТОМ СООБЩЕНИЯ
+        add_warn_user(message)
+        await warn_message(message)
+
+        # информация в консоль
+        print(f'DELETED ({message.author.mention}: {message.content})')
+
+        await message.delete()
+        await message.channel.send(
+            f"{message.author.mention} !!!СООБЩЕНИЕ БЫЛО УДАЛЕНО!!! (ознакомитесь с <#{chat_information}>)")
+
     elif message.channel.id == chat_music and (('/play' in message.content)  # если сообщение в МУЗЫКА
                                                or ('/resume' in message.content)
                                                or ('/pause' in message.content)
                                                or ('/stop' in message.content)
                                                or ('/leave' in message.content)):
-
-        print(message.content)
 
         # ПОДКЛЮЧЕНИЕ К БД
         user = User.get(User.user_id == message.author.mention)
