@@ -1,18 +1,20 @@
 import asyncio
 import discord
+import random
 import youtube_dl
 from discord.ext import commands
 from interaction_db import User
 import datetime as dt
 import json
 
-# VERSION 0.8.0
+# VERSION 0.9.0 RELEASE
 # Изменения:
-# 1. полностью переделаны команды музыки
-# 2. незначительная оптимизация
+# 1. добавлена возможность подкинуть монетку
+# 2. теперь бот выдаёт стартовою роль
+# 3. незначительная оптимизация
 
 # ПАРАМЕТРЫ
-token = ''  # токен
+token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.GUPxdgWL6iE2Cq-0kEA_xkJUpfE'  # токен
 PREFIX = '/'  # префикс
 intents = discord.Intents.all()  # права
 
@@ -39,7 +41,10 @@ chat_chat = 738890737403428989
 price_level = 1000  # цена за level
 
 price_vip_role = 9999  # цена за vip_role
+
+# Роли
 id_vip_role = 963868471660265502
+id_start_role = 965963178104213514
 
 # РАБОТА С ФАЙЛАМИ
 with open("ban_words.json", "r", encoding='utf-8') as read_file:  # открыл json файл для чтения
@@ -277,21 +282,58 @@ async def buy(ctx, product, quantity: int = None):
     await ctx.message.delete()
 
 
-# ПРОВЕРКА СООБЩЕНИЯ НА ЗАПРЕЩЁННЫЕ СЛОВА
+# ВЫДАЧА СТАРТОВОЙ РОЛИ
 @bot.event
-async def on_message(message):
+async def on_member_join(member):
     # ОБНОВИЛ ДАННЫЙ БД
-    if f'<@{message.author.id}>' not in list_users:
+    if f'<@{member.id}>' not in list_users:
         # ДОБАВЛЕНИЕ НОВОГО ПОЛЬЗОВАТЕЛЯ В БД
-        list_users.append(f'<@{message.author.id}>')
+        list_users.append(f'<@{member.id}>')
         with open('list_users.json', 'w') as outfile:
             json.dump(list_users, outfile)
 
-        User.create(user_id=f'<@{message.author.id}>', quantity_warn=0)
+        User.create(user_id=f'<@{member.id}>', quantity_warn=0)
 
+    role = member.guild.get_role(role_id=id_start_role)
+    await member.add_roles(role)
+
+
+def coin_toss(message):
+    probability = random.randint(0, 11)
+
+    # ПОДКЛЮЧЕНИЕ К БД
+    user = User.get(User.user_id == f'<@{message.author.id}>')
+    point = user.quantity_point
+
+    # ОБНОВИЛ ДАННЫE БД
+    user = User(quantity_point=str(int(point) - 1))
+    user.user_id = f'<@{message.author.id}>'  # Тот самый первичный ключ
+    user.save()
+
+    if probability < 5:
+        return '🪙 (орёл)'
+    elif 5 <= probability < 10:
+        return '🪙 (решка)'
+    else:
+        coin_status = random.randint(0, 1)
+        if coin_status == 0:
+            return '🪙 (монетка упала на ребро)'
+        else:
+            return '🪙 (монетка укатилась)'
+
+
+# ПРОВЕРКА СООБЩЕНИЯ НА ЗАПРЕЩЁННЫЕ СЛОВА
+@bot.event
+async def on_message(message):
     # ПРОВЕРКИ СООБЩЕНИЙ НА ЗАПРЕЩЁННЫЙ КОНТЕНТ
     if f'<@{message.author.id}>' == f'<@{bot_id}>':  # если сообщение от бота
         pass
+
+    elif ('<@738915154980503583>' in message.content) and \
+            (('подкинь' in message.content) or ('кинь' in message.content) or ('подбрось' in message.content.lower()) or ('брось' in message.content.lower())) and \
+            (('монетку' in message.content.lower()) or ('монету' in message.content.lower())):
+
+        await message.channel.send(coin_toss(message))
 
     elif (message.channel.id == chat_catalog and (('/catalog' not in message.content) and ('/buy' not in message.content))) \
             or (message.channel.id != chat_catalog and (('/catalog' in message.content) or ('/buy' in message.content))):
