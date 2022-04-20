@@ -14,7 +14,7 @@ import json
 # 3. незначительная оптимизация
 
 # ПАРАМЕТРЫ
-token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.GUPxdgWL6iE2Cq-0kEA_xkJUpfE'  # токен
+token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.LJ-4lGianV31GXT61n3PcFIhIqU'  # токен
 PREFIX = '/'  # префикс
 intents = discord.Intents.all()  # права
 
@@ -116,7 +116,7 @@ async def warn_message(message):
 @bot.command()
 async def add_point(ctx, *, message):
     user_user = message.split(' ')[0]
-    new_point = int(message[-1])
+    new_point = int(message.split(' ')[-1])
 
     # admin ли?
     admin_status = False
@@ -298,6 +298,7 @@ async def on_member_join(member):
     await member.add_roles(role)
 
 
+# БРОСОК МОНЕТКИ
 def coin_toss(message):
     probability = random.randint(0, 11)
 
@@ -432,7 +433,7 @@ async def play(ctx, url):
     data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
 
     song = data['url']
-    player = discord.FFmpegPCMAudio(song, **ffmpeg_options, executable='ffmpeg/bin/ffmpeg.exe')
+    player = discord.FFmpegPCMAudio(song, **ffmpeg_options)
     voice_client.play(player)
 
     # ГЕНЕРАЦИЯ СООБЩЕНИЯ
