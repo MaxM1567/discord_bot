@@ -7,14 +7,14 @@ from interaction_db import User
 import datetime as dt
 import json
 
-# VERSION 0.9.1 RELEASE
+# VERSION 0.9.2 RELEASE
 # Изменения:
 # 1. добавлена возможность подкинуть монетку
 # 2. теперь бот выдаёт стартовою роль
 # 3. незначительная оптимизация
 
 # ПАРАМЕТРЫ
-token = ''  # токен
+token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.jTPllqjgtg-2GXfENdRnhSc0VtQ'  # токен
 PREFIX = '/'  # префикс
 intents = discord.Intents.all()  # права
 
@@ -105,7 +105,7 @@ async def warn_message(message):
     embA.add_field(name='Пользователь', value=f'<@{message.author.id}>')
     embA.add_field(name='Модератор', value=f'<@{bot_id}>')
     embA.add_field(name='Причина', value='Запрещённый контент в сообщении', inline=False)
-    embA.add_field(name='Канал', value=f'<@{message.author.id}>')
+    embA.add_field(name='Канал', value=f'<@{message.channel.mention}>')
     embA.add_field(name='WARN', value=f'{warn}')
     embA.add_field(name='Сообщение', value=f'||{message.content}||', inline=False)
 
@@ -270,6 +270,7 @@ async def buy(ctx, product, quantity: int = None):
 
             role = discord.utils.get(bot.get_guild(ctx.guild.id).roles, id=id_vip_role)
             await ctx.author.add_roles(role)
+            await ctx.send(f'<@{ctx.author.id}> !!!ПОКУПКА ПРОШЛА УСПЕШНО!!!')
             await ctx.message.delete()
 
             # ОБНОВИЛ ДАННЫE БД
