@@ -7,14 +7,14 @@ from interaction_db import User
 import datetime as dt
 import json
 
-# VERSION 0.9.0 RELEASE
+# VERSION 0.9.1 RELEASE
 # Изменения:
 # 1. добавлена возможность подкинуть монетку
 # 2. теперь бот выдаёт стартовою роль
 # 3. незначительная оптимизация
 
 # ПАРАМЕТРЫ
-token = 'NzM4OTE1MTU0OTgwNTAzNTgz.XyS2XQ.GUPxdgWL6iE2Cq-0kEA_xkJUpfE'  # токен
+token = ''  # токен
 PREFIX = '/'  # префикс
 intents = discord.Intents.all()  # права
 
@@ -116,7 +116,7 @@ async def warn_message(message):
 @bot.command()
 async def add_point(ctx, *, message):
     user_user = message.split(' ')[0]
-    new_point = int(message[-1])
+    new_point = int(message.split(' ')[-1])
 
     # admin ли?
     admin_status = False
@@ -298,6 +298,7 @@ async def on_member_join(member):
     await member.add_roles(role)
 
 
+# БРОСОК МОНЕТКИ
 def coin_toss(message):
     probability = random.randint(0, 11)
 
@@ -548,6 +549,13 @@ def date_registration(user_id, action):
         pass
 
 
+def bot_in_voice_status(l1st_users):
+    if len(l1st_users) == 1:
+        for i in l1st_users:
+            if str(i) == 'BotMaxon#7319':
+                return True
+
+
 # АУДИТ ЛОГИ
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -570,6 +578,9 @@ async def on_voice_state_update(member, before, after):
 
     # left voice
     elif before.channel is not None and after.channel is None:  # вышел из голосового канала
+
+        if bot_in_voice_status(before.channel.members):  # остался ли бот один
+            await (discord.utils.get(bot.voice_clients, guild=before.channel.guild)).disconnect()
 
         # ИНИЦИАЛИЗАЦИЯ ПЕРЕМЕННЫХ
         action = 'dis_con'
